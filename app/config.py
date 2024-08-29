@@ -12,26 +12,47 @@ from logging.handlers import RotatingFileHandler
 load_dotenv(find_dotenv())
 
 class Settings(BaseSettings):
-    api_key: SecretStr = Field(..., env='API_KEY')  
-    database_url: PostgresDsn = Field(..., env='DATABASE_URL')
+    api_key: SecretStr = Field(..., env='API_KEY')
+    db_driver: str = Field(..., env='DB_DRIVER')
+    db_host: str = Field(..., env='DB_HOST')
+    db_port: int = Field(..., env='DB_PORT')
+    db_user: str = Field(..., env='DB_USER')
+    db_password: SecretStr = Field(..., env='DB_PASSWORD')
+    db_name: str = Field(..., env='DB_NAME')
+
     rabbitmq_host: str = Field(..., env='RABBITMQ_HOST')
     rabbitmq_port: int = Field(..., env='RABBITMQ_PORT')
     rabbitmq_user: str = Field(..., env='RABBITMQ_USER')
     rabbitmq_password: str = Field(..., env='RABBITMQ_PASSWORD')
-    secret_key: str = Field(..., env='SECRET_KEY')
-
-    @property
-    def amqp_dsn(self) -> AmqpDsn:
-        return f"amqp://{self.rabbitmq_user}:{self.rabbitmq_password}@{self.rabbitmq_host}:{self.rabbitmq_port}/"
-
 
     secret_key: SecretStr = Field(..., env='SECRET_KEY')
     debug: bool = Field(False, env='DEBUG')
 
+    @property
+    def database_url(self) -> PostgresDsn:
+        return PostgresDsn.build(
+            scheme=self.db_driver,
+            username=self.db_user,
+            password=self.db_password.get_secret_value(),
+            host=self.db_host,
+            port=self.db_port,
+            path=f"/{self.db_name}"
+        )
+
+    @property
+    def amqp_dsn(self) -> AmqpDsn:
+        return AmqpDsn.build(
+            scheme="amqp",
+            user=self.rabbitmq_user,
+            password=self.rabbitmq_password,
+            host=self.rabbitmq_host,
+            port=str(self.rabbitmq_port),
+        )
+
     class Config:
         env_file = '.env'
         env_file_encoding = 'utf-8'
-        extra= 'allow'
+        extra = 'allow'
 
 class Logger:
     @classmethod
@@ -58,8 +79,7 @@ class Logger:
 
 # Example usage
 logger = Logger.get_logger()
-logger.info("This is an info message.")
-                                                                                                                                              
+logger.info("This is an info message.")                                                                                                                       
 
 settings= Settings()
     

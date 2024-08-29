@@ -1,24 +1,32 @@
-# Use the official Python base image
-FROM python:3.11-slim
+# Use the official Python slim base image
+FROM python:3.8
 
-# Set environment variables to prevent Python from writing .pyc files and to buffer output directly
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Install system dependencies and clean up cache
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the requirements file into the container
+# Copy the requirements file first to leverage Docker cache for dependencies
 COPY requirements.txt .
 
-# Install the required dependencies
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the entire application code into the container
 COPY . .
 
-# Expose the port that FastAPI will run on
+# Expose the port that the application will run on
 EXPOSE 8000
 
-# Command to run the FastAPI app using Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Command to run the FastAPI app using Gunicorn with Uvicorn workers
+CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
