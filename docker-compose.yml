@@ -1,6 +1,14 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   fastapi:
     build:
       context: .
@@ -14,17 +22,15 @@ services:
       - DB_PORT=${DB_PORT}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}w
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
-      - RABBITMQ_PORT=${RABBITMQ_PORT}
-      - RABBITMQ_USER=${RABBITMQ_USER}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
       - SECRET_KEY=${SECRET_KEY}
       - API_KEY=${API_KEY}
       - DEBUG=${DEBUG}
     depends_on:
       - postgres
-      - rabbitmq
+      - redis
 
   postgres:
     image: postgres:16
@@ -38,18 +44,50 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celery_worker
+    command: ["celery", "-A", "celery_worker.task.celery_app", "worker", "--loglevel=info"]
+    depends_on:
+      - redis
+      - postgres
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-    ports:
-      - "5672:5672"
-      - "15672:15672" # Management UI
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - DB_DRIVER=${DB_DRIVER}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - SECRET_KEY=${SECRET_KEY}
+      - API_KEY=${API_KEY}
+      - DEBUG=${DEBUG}
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celery_beat
+    command: ["celery", "-A", "celery_worker.task.celery_app", "beat", "--loglevel=info"]
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      - DB_DRIVER=${DB_DRIVER}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - SECRET_KEY=${SECRET_KEY}
+      - API_KEY=${API_KEY}
+      - DEBUG=${DEBUG}
 
 volumes:
   postgres_data:
-  rabbitmq_data:
+  redis_data:

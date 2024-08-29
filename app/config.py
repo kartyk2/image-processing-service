@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     rabbitmq_port: int = Field(..., env='RABBITMQ_PORT')
     rabbitmq_user: str = Field(..., env='RABBITMQ_USER')
     rabbitmq_password: str = Field(..., env='RABBITMQ_PASSWORD')
+    
+    redis_host: str = Field(..., env='REDIS_HOST')
+    redis_port: int = Field(..., env='REDIS_PORT')
+    redis_db: int = Field(..., env='REDIS_DB')
 
     secret_key: SecretStr = Field(..., env='SECRET_KEY')
     debug: bool = Field(False, env='DEBUG')
@@ -40,14 +44,8 @@ class Settings(BaseSettings):
         )
 
     @property
-    def amqp_dsn(self) -> AmqpDsn:
-        return AmqpDsn.build(
-            scheme="amqp",
-            user=self.rabbitmq_user,
-            password=self.rabbitmq_password,
-            host=self.rabbitmq_host,
-            port=str(self.rabbitmq_port),
-        )
+    def amqp_dsn(self) -> str:
+        return f"amqp://{self.rabbitmq_user}:{self.rabbitmq_password}@{self.rabbitmq_host}:{self.rabbitmq_port}//"
 
     class Config:
         env_file = '.env'
