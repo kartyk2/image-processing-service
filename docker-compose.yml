@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:kartyk@postgres:5432/image_processing_app
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=myrabbituser
+      - RABBITMQ_PASSWORD=myrabbitpassword
+      - SECRET_KEY=your_secret_key_here
+      - API_KEY=your_api_key_here
+      - DEBUG=True
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: kartyk
+      POSTGRES_DB: image_processing_app
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: myrabbituser
+      RABBITMQ_DEFAULT_PASS: myrabbitpassword
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
