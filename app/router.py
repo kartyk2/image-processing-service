@@ -1,14 +1,19 @@
 from datetime import datetime
 import io
-from fastapi import APIRouter, UploadFile, HTTPException, status
+import traceback
+import uuid, ast
+from fastapi import APIRouter, Depends, UploadFile, HTTPException, status
 from fastapi.responses import JSONResponse
 from celery.result import AsyncResult
 import pandas as pd
 from typing import List
-import logging
+from sqlalchemy.orm import Session
 
 from app.config import Logger
-from celery_worker.task import add, simulate_long_task
+from app.database import get_db
+from app.model import Request
+from app.schema import Product
+from celery_worker.task import add, process_product, simulate_long_task
 
 router = APIRouter()
 logger = Logger.get_logger()
@@ -34,13 +39,12 @@ async def health_check():
     }
 
 @router.post("/upload")
-async def upload_csv_file(file: UploadFile):
+async def upload_csv_file(file: UploadFile, db: Session = Depends(get_db)):
     try:
         if not file.filename.endswith('.csv'):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only CSV files are allowed.")
         
         content = await file.read()
-        
         try:
             data = io.StringIO(content.decode('utf-8'))
             df = pd.read_csv(data, sep=",")
@@ -49,19 +53,55 @@ async def upload_csv_file(file: UploadFile):
         except Exception as e:
             return JSONResponse(content={"message": f"Error reading CSV file: {e}"}, status_code=status.HTTP_400_BAD_REQUEST)
 
-        required_columns = {'Serial Number', 'Product Name', 'Input Image Urls'}
+        required_columns = {'SerialNumber', 'ProductName', 'InputImageUrls'}
         
         if not required_columns.issubset(df.columns):
             missing = required_columns - set(df.columns)
             return JSONResponse(content={"message": f"CSV file is missing required columns: {', '.join(missing)}"}, status_code=status.HTTP_400_BAD_REQUEST)
+            
+        unique_request_id = uuid.uuid4().hex
 
-        logger.info(f"Successfully uploaded file: {file.filename}")
-        return JSONResponse(content={"message": "File uploaded successfully."}, status_code=status.HTTP_200_OK)
+        new_request = Request(request_id=unique_request_id)
+        db.add(new_request)
+        db.commit()  
+        
+        for index, product_row in df.iterrows():
+            try:
+                # Print the entire row
+                print(product_row)
+
+                # Access the data directly from the product_row Series
+                serial_number = str(product_row['SerialNumber'])
+                product_name = product_row['ProductName']
+                input_image_urls = input_image_urls = product_row['InputImageUrls'].split(',')
+
+                # Print to verify values
+                print(f"Product Name: {product_name}")
+
+                # Create a product object
+                product = Product(
+                    request_id=unique_request_id,
+                    product_id=serial_number,
+                    name=product_name,
+                    images=input_image_urls
+                )
+                
+                print(product)
+                # Process each product asynchronously
+                result = process_product.apply_async(args=[product.model_dump()])
+
+            except (ValueError, SyntaxError) as e:
+                raise HTTPException(status_code=400, detail=f"Error processing row {index + 1}: {str(e)}")
+
+        logger.info(f"Successfully uploaded file: {file.filename} request_id: {unique_request_id}")
+
+        # Return the unique request ID as JSON
+        return JSONResponse(content={"request_id": unique_request_id}, status_code=status.HTTP_200_OK)
 
     except HTTPException as http_exc:
         logger.warning(f"HTTP exception for file {file.filename}: {http_exc.detail}")
         raise http_exc
 
     except Exception as exception:
-        logger.error(f"An error occurred while uploading file {file.filename}: {str(exception)}")
+        logger.error(f"An error occurred while uploading file {file.filename}: {traceback.format_exc()}")
         return JSONResponse(content={"message": "An error occurred while processing the file."}, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -75,9 +75,5 @@ class Logger:
 
         return logger
 
-# Example usage
-logger = Logger.get_logger()
-logger.info("This is an info message.")                                                                                                                       
-
 settings= Settings()
     
