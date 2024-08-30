@@ -40,7 +40,7 @@ class Settings(BaseSettings):
             password=self.db_password.get_secret_value(),
             host=self.db_host,
             port=self.db_port,
-            path=f"/{self.db_name}"
+            path=f"{self.db_name}"
         )
 
     @property
