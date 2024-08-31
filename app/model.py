@@ -36,9 +36,8 @@ class Request(Base):
     status = Column(Enum(RequestStatus), default=RequestStatus.pending)
     created_at = Column(DateTime, default=datetime.now())
     updated_at = Column(DateTime, default=datetime.now(), onupdate=datetime.now())
-    input_csv_url = Column(Text, nullable=True)
-    output_csv_url = Column(Text, nullable=True)
-
+    
+    total_images= Column(Integer)
     products = relationship("Product", back_populates="request")
 
 

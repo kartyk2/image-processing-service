@@ -2,7 +2,8 @@ from typing import List
 from pydantic import BaseModel, AnyHttpUrl
 
 
-class Product(BaseModel):
+class ProductAdd(BaseModel):
+    """ schema for Product object """
     request_id: str
     product_id: str
     name: str
