@@ -5,6 +5,7 @@ import uuid, ast
 from fastapi import APIRouter, Depends, UploadFile, HTTPException, status
 from fastapi.responses import JSONResponse
 from celery.result import AsyncResult
+from celery import chord
 import pandas as pd
 from typing import List
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from app.config import Logger
 from app.database import get_db
 from app.model import Request
 from app.schema import Product
-from celery_worker.task import add, process_product, simulate_long_task
+from celery_worker.task import add, finalize_request, process_product, simulate_long_task
 
 router = APIRouter()
 logger = Logger.get_logger()
@@ -65,6 +66,7 @@ async def upload_csv_file(file: UploadFile, db: Session = Depends(get_db)):
         db.add(new_request)
         db.commit()  
         
+        tasks= []
         for index, product_row in df.iterrows():
             try:
                 # Print the entire row
@@ -87,13 +89,16 @@ async def upload_csv_file(file: UploadFile, db: Session = Depends(get_db)):
                 )
                 
                 print(product)
-                # Process each product asynchronously
-                result = process_product.apply_async(args=[product.model_dump()])
-
+                tasks.append(process_product.s(product.model_dump()))
+            
             except (ValueError, SyntaxError) as e:
                 raise HTTPException(status_code=400, detail=f"Error processing row {index + 1}: {str(e)}")
-
-        logger.info(f"Successfully uploaded file: {file.filename} request_id: {unique_request_id}")
+            
+        # Process each product asynchronously
+        # Use chord to trigger a callback after all tasks are completed
+        print(len(tasks))
+        task_callback = chord(tasks)(finalize_request.s(unique_request_id))
+        print(task_callback)
 
         # Return the unique request ID as JSON
         return JSONResponse(content={"request_id": unique_request_id}, status_code=status.HTTP_200_OK)
